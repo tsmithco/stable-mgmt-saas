@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { moduleConfig } from '../..'
+import { moduleConfig } from '../../module.config'
 
 describe('Horse Management Module Config', () => {
   it('has valid module metadata', () => {

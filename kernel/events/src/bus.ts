@@ -33,7 +33,9 @@ export class EventBus {
   }
 
   onAny(handler: (event: string, data: any) => void | Promise<void>) {
-    this.emitter.onAny(handler)
+    // EventEmitter3 uses listeners for all events
+    // For now, we'll use a simple approach - emit a catch-all event
+    this.emitter.on('*', handler)
   }
 }
 
