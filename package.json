@@ -1,0 +1,29 @@
+{
+  "name": "stable-mgmt-saas",
+  "version": "0.1.0",
+  "description": "Modern SaaS for horse barn management",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "kernel/*",
+    "modules/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "test:watch": "turbo run test:watch",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "db:migrate": "turbo run db:migrate",
+    "db:seed": "turbo run db:seed"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.57.0",
+    "turbo": "^1.13.3",
+    "typescript": "^5.3.3"
+  }
+}
