@@ -4,18 +4,14 @@
  */
 
 import { FastifyInstance } from 'fastify'
+import { db } from '../db.js'
 
-interface Horse {
-  id: string
+interface HorseInput {
   name: string
   breed: string
   age: number
-  color: string
-  orgId: string
+  color?: string
 }
-
-// In-memory storage for demo (replace with DB in production)
-const horses: Map<string, Horse> = new Map()
 
 export async function registerHorseManagementRoutes(server: FastifyInstance) {
   /**
@@ -32,13 +28,19 @@ export async function registerHorseManagementRoutes(server: FastifyInstance) {
       })
     }
 
-    const orgHorses = Array.from(horses.values()).filter(
-      (h) => h.orgId === orgId
-    )
+    try {
+      const horses = await db.listHorsesByOrg(orgId)
 
-    return {
-      data: orgHorses,
-      count: orgHorses.length
+      return {
+        data: horses,
+        count: horses.length
+      }
+    } catch (err) {
+      server.log.error(err)
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to fetch horses'
+      })
     }
   })
 
@@ -46,45 +48,46 @@ export async function registerHorseManagementRoutes(server: FastifyInstance) {
    * POST /api/horses
    * Create a new horse
    */
-  server.post<{ Body: Omit<Horse, 'id' | 'orgId'> }>(
-    '/api/horses',
-    async (request, reply) => {
-      const orgId = request.auth?.orgId
+  server.post<{ Body: HorseInput }>('/api/horses', async (request, reply) => {
+    const orgId = request.auth?.orgId
 
-      if (!orgId) {
-        return reply.status(401).send({
-          error: 'Unauthorized',
-          message: 'No organization context'
-        })
-      }
+    if (!orgId) {
+      return reply.status(401).send({
+        error: 'Unauthorized',
+        message: 'No organization context'
+      })
+    }
 
-      const { name, breed, age, color } = request.body
+    const { name, breed, age, color } = request.body
 
-      if (!name || !breed || typeof age !== 'number') {
-        return reply.status(400).send({
-          error: 'Bad Request',
-          message: 'Missing required fields: name, breed, age'
-        })
-      }
+    if (!name || !breed || typeof age !== 'number') {
+      return reply.status(400).send({
+        error: 'Bad Request',
+        message: 'Missing required fields: name, breed, age'
+      })
+    }
 
-      const id = `horse-${Date.now()}`
-      const newHorse: Horse = {
-        id,
+    try {
+      const newHorse = await db.createHorse({
         name,
         breed,
         age,
-        color: color || 'unknown',
+        color: color || null,
         orgId
-      }
-
-      horses.set(id, newHorse)
+      })
 
       return reply.status(201).send({
         data: newHorse,
         message: 'Horse created successfully'
       })
+    } catch (err) {
+      server.log.error(err)
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to create horse'
+      })
     }
-  )
+  })
 
   /**
    * GET /api/horses/:id
@@ -103,23 +106,31 @@ export async function registerHorseManagementRoutes(server: FastifyInstance) {
         })
       }
 
-      const horse = horses.get(id)
+      try {
+        const horse = await db.getHorse(id)
 
-      if (!horse) {
-        return reply.status(404).send({
-          error: 'Not Found',
-          message: `Horse with ID ${id} not found`
+        if (!horse) {
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: `Horse with ID ${id} not found`
+          })
+        }
+
+        if (horse.orgId !== orgId) {
+          return reply.status(403).send({
+            error: 'Forbidden',
+            message: 'You do not have access to this horse'
+          })
+        }
+
+        return { data: horse }
+      } catch (err) {
+        server.log.error(err)
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to fetch horse'
         })
       }
-
-      if (horse.orgId !== orgId) {
-        return reply.status(403).send({
-          error: 'Forbidden',
-          message: 'You do not have access to this horse'
-        })
-      }
-
-      return { data: horse }
     }
   )
 
@@ -127,7 +138,7 @@ export async function registerHorseManagementRoutes(server: FastifyInstance) {
    * PUT /api/horses/:id
    * Update a horse
    */
-  server.put<{ Params: { id: string }; Body: Partial<Omit<Horse, 'id' | 'orgId'>> }>(
+  server.put<{ Params: { id: string }; Body: Partial<HorseInput> }>(
     '/api/horses/:id',
     async (request, reply) => {
       const { id } = request.params
@@ -140,26 +151,36 @@ export async function registerHorseManagementRoutes(server: FastifyInstance) {
         })
       }
 
-      const horse = horses.get(id)
+      try {
+        const horse = await db.getHorse(id)
 
-      if (!horse) {
-        return reply.status(404).send({
-          error: 'Not Found',
-          message: `Horse with ID ${id} not found`
+        if (!horse) {
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: `Horse with ID ${id} not found`
+          })
+        }
+
+        if (horse.orgId !== orgId) {
+          return reply.status(403).send({
+            error: 'Forbidden',
+            message: 'You do not have access to this horse'
+          })
+        }
+
+        const updated = await db.updateHorse(id, request.body)
+
+        return {
+          data: updated,
+          message: 'Horse updated successfully'
+        }
+      } catch (err) {
+        server.log.error(err)
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to update horse'
         })
       }
-
-      if (horse.orgId !== orgId) {
-        return reply.status(403).send({
-          error: 'Forbidden',
-          message: 'You do not have access to this horse'
-        })
-      }
-
-      const updated = { ...horse, ...request.body }
-      horses.set(id, updated)
-
-      return { data: updated, message: 'Horse updated successfully' }
     }
   )
 
@@ -180,25 +201,33 @@ export async function registerHorseManagementRoutes(server: FastifyInstance) {
         })
       }
 
-      const horse = horses.get(id)
+      try {
+        const horse = await db.getHorse(id)
 
-      if (!horse) {
-        return reply.status(404).send({
-          error: 'Not Found',
-          message: `Horse with ID ${id} not found`
+        if (!horse) {
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: `Horse with ID ${id} not found`
+          })
+        }
+
+        if (horse.orgId !== orgId) {
+          return reply.status(403).send({
+            error: 'Forbidden',
+            message: 'You do not have access to this horse'
+          })
+        }
+
+        await db.deleteHorse(id)
+
+        return { message: 'Horse deleted successfully' }
+      } catch (err) {
+        server.log.error(err)
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to delete horse'
         })
       }
-
-      if (horse.orgId !== orgId) {
-        return reply.status(403).send({
-          error: 'Forbidden',
-          message: 'You do not have access to this horse'
-        })
-      }
-
-      horses.delete(id)
-
-      return { message: 'Horse deleted successfully' }
     }
   )
 }
