@@ -6,6 +6,7 @@
 import Fastify from 'fastify'
 import { registerHorseManagementRoutes } from './modules/horse-management.js'
 import { mockAuthMiddleware } from './middleware/auth.js'
+import { db } from './db.js'
 
 const PORT = 3000
 const HOST = '0.0.0.0'
@@ -23,6 +24,11 @@ async function main() {
       }
     }
   })
+
+  // Initialize database connection
+  console.log('🔧 Initializing database...')
+  await db.listHorsesByOrg('_init_check')
+  console.log('✅ Database layer initialized')
 
   // Register global middleware
   server.addHook('preHandler', mockAuthMiddleware)
